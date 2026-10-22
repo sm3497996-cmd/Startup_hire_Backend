@@ -1,0 +1,14 @@
+{
+  "candidate_id": 1,
+  "experience": [
+    {
+      "role": "Web Developer Intern",
+      "company": "Business Samadhan",
+      "type": "Internship",
+      "location": "Jabalpur",
+      "startDate": "2026-08-01",
+      "endDate": null,
+      "description": "Worked on frontend development using React.js and JavaScript."
+    }
+  ]
+}

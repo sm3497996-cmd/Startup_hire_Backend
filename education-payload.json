@@ -1,0 +1,20 @@
+﻿{
+  "candidate_id": 1,
+  "education": [
+    {
+      "type": "Graduation",
+      "degree": "B.Tech",
+      "industry": "Computer Science",
+      "institution": "Global Engineering College",
+      "board": "RGPV",
+      "startDate": "2023-07-01",
+      "endDate": "2027-06-01",
+      "percentage": 78.5,
+      "courseType": "Pursuing",
+      "city": "Jabalpur",
+      "state": "Madhya Pradesh",
+      "country": "India",
+      "pincode": "482001"
+    }
+  ]
+}

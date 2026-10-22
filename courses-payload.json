@@ -1,0 +1,15 @@
+{
+  "candidate_id": 1,
+  "courses": [
+    {
+      "type": "course",
+      "title": "Frontend Development",
+      "institute": "CodeAlpha",
+      "startDate": "2026-05-01",
+      "validTill": "2027-05-01",
+      "certNumber": "CA-FD-001",
+      "link": "https://example.com/certificate",
+      "details": "HTML, CSS, JavaScript and React development"
+    }
+  ]
+}

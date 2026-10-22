@@ -1,0 +1,15 @@
+{
+  "candidate_id": 1,
+  "skills": [
+    {
+      "skill_name": "React.js",
+      "proficiency_level": "intermediate",
+      "experience_years": 1.0
+    },
+    {
+      "skill_name": "JavaScript",
+      "proficiency_level": "intermediate",
+      "experience_years": 1.5
+    }
+  ]
+}

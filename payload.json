@@ -1,0 +1,11 @@
+﻿{
+  "candidate_id": 1,
+  "personal": {
+    "headline": "Frontend Developer",
+    "gender": "Female",
+    "city": "Jabalpur",
+    "state": "Madhya Pradesh",
+    "country": "India",
+    "summary": "Frontend development learner"
+  }
+}

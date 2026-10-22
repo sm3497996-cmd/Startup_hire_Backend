@@ -1,0 +1,17 @@
+{
+  "candidate_id": 1,
+  "achievements": [
+    {
+      "title": "Frontend Development Internship",
+      "desc": "Successfully completed a frontend development internship.",
+      "issuer": "CodeAlpha",
+      "date": "2026-06-01"
+    },
+    {
+      "title": "Coding Achievement",
+      "desc": "Completed multiple coding and DSA problems.",
+      "issuer": "LeetCode",
+      "date": "2026-08-01"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "candidate_id": 1,
+  "projects": [
+    {
+      "title": "StartupHire",
+      "description": "A job portal developed using React.js with candidate and employer features.",
+      "stack": [
+        "React.js",
+        "JavaScript",
+        "HTML",
+        "CSS"
+      ],
+      "link": "https://github.com/example/startup-hire"
+    },
+    {
+      "title": "Currency Converter",
+      "description": "A web application for converting currencies using an API.",
+      "stack": [
+        "HTML",
+        "CSS",
+        "JavaScript",
+        "API"
+      ],
+      "link": "https://github.com/example/currency-converter"
+    }
+  ]
+}
