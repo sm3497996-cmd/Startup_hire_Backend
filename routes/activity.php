@@ -1,6 +1,6 @@
 <?php
 /**
- * Super Admin â€” Activity API
+ * Super Admin Ã¢â‚¬â€ Activity API
  * ---------------------------------------------------------
  * GET ?action=login_success|login_failed|logout|All  &q=search
  *     -> recent activity_log rows, newest first, joined with user info

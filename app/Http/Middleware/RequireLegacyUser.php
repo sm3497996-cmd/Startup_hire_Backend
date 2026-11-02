@@ -13,6 +13,12 @@ class RequireLegacyUser
     public function handle(Request $request, Closure $next, ...$roles)
     {
         $sid = $request->cookies->get('PHPSESSID');
+if (!$sid) {
+    $bearer = $request->bearerToken();
+    if ($bearer && preg_match('/^[A-Za-z0-9,-]{20,128}$/', $bearer)) {
+        $sid = $bearer;
+    }
+}
         if (!$sid) {
             return response()->json(['success' => false, 'message' => 'You must be logged in.'], 401);
         }

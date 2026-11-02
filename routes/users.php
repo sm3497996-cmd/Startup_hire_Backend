@@ -1,6 +1,6 @@
 <?php
 /**
- * Super Admin â€” platform-wide Users API
+ * Super Admin Ã¢â‚¬â€ platform-wide Users API
  * ---------------------------------------------------------
  * GET  ?role=candidate|employer|All  &q=search&status=active|inactive
  *      -> list of ALL users on the platform (never passwords)

@@ -45,6 +45,11 @@ function application_row($row) {
 
         "reviewed_by_name" => $row["reviewed_by_name"] ?? null,
         "reviewed_at" => $row["reviewed_at"] ?? null,
+                "reviewed_at" => $row["reviewed_at"] ?? null,
+
+        "screening_answers" => !empty($row["screening_answers"])
+            ? (json_decode($row["screening_answers"], true) ?: [])
+            : [],
     ];
 }
 
@@ -196,12 +201,30 @@ if ($method === "POST") {
             exit;
         }
 
+                // Screening answers (JSON string)
+        $answersJson = null;
+        $rawAnswers = $body["screening_answers"] ?? null;
+        if ($rawAnswers) {
+            $decoded = json_decode($rawAnswers, true);
+            if (is_array($decoded)) {
+                $clean = [];
+                foreach (array_slice($decoded, 0, 10) as $a) {
+                    $clean[] = [
+                        "question" => mb_substr((string)($a["question"] ?? ""), 0, 500),
+                        "type" => (string)($a["type"] ?? "text"),
+                        "answer" => mb_substr((string)($a["answer"] ?? ""), 0, 1000),
+                    ];
+                }
+                $answersJson = json_encode($clean, JSON_UNESCAPED_UNICODE);
+            }
+        }
+
         // FIX: PHP 8.1+ me duplicate insert exception throw karta hai, isliye try/catch
         try {
             $stmt = $conn->prepare(
-                "INSERT INTO applications (job_id, candidate_id) VALUES (?, ?)"
+                "INSERT INTO applications (job_id, candidate_id, screening_answers) VALUES (?, ?, ?)"
             );
-            $stmt->bind_param("ii", $jobId, $user["id"]);
+            $stmt->bind_param("iis", $jobId, $user["id"], $answersJson);
             $stmt->execute();
 
             echo json_encode(["success" => true, "message" => "Application submitted"]);

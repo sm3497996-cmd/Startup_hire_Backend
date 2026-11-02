@@ -28,7 +28,7 @@ $method = $_SERVER["REQUEST_METHOD"];
 
 $conn->query(
     "CREATE TABLE IF NOT EXISTS employer_feed_state (
-        user_id INT NOT NULL PRIMARY KEY
+        user_id INT NOT NULL PRIMARY KEY,
         last_seen_at DATETIME NOT NULL
     )"
 );
@@ -179,13 +179,24 @@ if ($method === "GET" && $action === "interactions") {
         JOIN users u ON u.id = s.candidate_id
         WHERE j.posted_by = ?
 
+        UNION ALL
+
+        SELECT CONCAT('l', l.id), 'like', u.name, 'liked your', j.title,
+               DATE_FORMAT(l.created_at, '%d %b %Y'),
+               TIMESTAMPDIFF(SECOND, l.created_at, NOW())
+        FROM job_likes l
+        JOIN jobs j ON j.id = l.job_id
+        JOIN users u ON u.id = l.user_id
+        WHERE j.posted_by = ?
+
         ORDER BY secs ASC
         LIMIT 30
     ";
 
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ii", $uid, $uid);
+    $stmt->bind_param("iii", $uid, $uid, $uid);
     $stmt->execute();
+    // ... baaki code same
     $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
     $list = [];

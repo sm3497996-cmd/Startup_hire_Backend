@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Jobs API
  * ---------------------------------------------------------
@@ -69,8 +69,14 @@ function job_row_to_array($row) {
         // Job Information
         "summary" => $row["summary"] ?? null,
         "description" => $row["description"],
-        "rules" => $row["rules"] ?? null,
+                "rules" => $row["rules"] ?? null,
+        "other_details" => $row["other_details"] ?? null,
+        "screening_questions" => !empty($row["screening_questions"])
+            ? (json_decode($row["screening_questions"], true) ?: [])
+            : [],
         "requirements" => $row["requirements"],
+                "views" => (int)($row["views"] ?? 0),
+        "applicants" => (int)($row["applicants"] ?? 0),
 
         "status" => $row["status"],
         "created_at" => $row["created_at"],
@@ -85,6 +91,18 @@ if ($method === "POST") {
     }
 
     $action = $body["action"] ?? "";
+        // Candidate ne job kholi -> view +1 (sirf logged-in candidate, sirf Active job)
+    if ($action === "view") {
+        $viewer = current_user();
+        $jobId = (int)($body["job_id"] ?? 0);
+        if ($jobId && $viewer && $viewer["role"] === "candidate") {
+            $s = $conn->prepare("UPDATE jobs SET views = views + 1 WHERE id = ? AND status = 'Active'");
+            $s->bind_param("i", $jobId);
+            $s->execute();
+        }
+        echo json_encode(["success" => true]);
+        exit;
+    }
 
     // Authentication
     $user = require_role(["employer", "superadmin"]);
@@ -140,7 +158,7 @@ if ($method === "POST") {
         $paymentDuration = $body["payment_duration"] ?? null;
         $salaryStart = $body["salary_start"] ?? null;
         $salaryEnd = $body["salary_end"] ?? null;
-        $salary = $body["salary"] ?? (($salaryStart || $salaryEnd) ? trim("₹$salaryStart - ₹$salaryEnd") : null);
+        $salary = $body["salary"] ?? (($salaryStart || $salaryEnd) ? trim("â‚¹$salaryStart - â‚¹$salaryEnd") : null);
 
         // Requirements
         $requiredSkills = $body["required_skills"] ?? null;
@@ -156,81 +174,71 @@ if ($method === "POST") {
         $description = $body["description"] ?? null;
         $rules = $body["rules"] ?? null;
         $otherDetails = $body["other_details"] ?? null;
+                $screeningRaw = $body["screening_questions"] ?? null;
+        $screeningQuestions = null;
+        if ($screeningRaw) {
+            $decoded = json_decode($screeningRaw, true);
+            if (is_array($decoded)) {
+                $screeningQuestions = json_encode(
+                    array_slice($decoded, 0, 10),
+                    JSON_UNESCAPED_UNICODE
+                );
+            }
+        }
+         
 
         // Status
         $status = $user["role"] === "superadmin"
     ? ($body["status"] ?? "Active")
     : "Active";
 
-        $stmt = $conn->prepare(
+               $stmt = $conn->prepare(
             "INSERT INTO jobs
             (
-                company_id,
-                posted_by,
-                title,
-                headline,
-                location,
-                city,
-                state,
-                country,
-                pincode,
-                address,
-                category,
-                job_section,
-                industry,
-                work_mode,
-                job_type,
-                payment_type,
-                payment_duration,
-                salary,
-                experience_required,
-                experience_months,
-                openings,
-                required_skills,
-                qualification,
-                summary,
-                description,
-                rules,
-                other_details,
-                requirements,
-                status
+                company_id, posted_by, title, headline, location, city, state,
+                country, pincode, address, category, job_section, industry,
+                work_mode, job_type, payment_type, payment_duration, salary,
+                experience_required, experience_months, openings, required_skills,
+                qualification, summary, description, rules, other_details,
+                requirements, status, screening_questions
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)"
+            VALUES (" . implode(",", array_fill(0, 30, "?")) . ")"
         );
-        $types = "ii" . str_repeat("s", 17) . "ii" . str_repeat("s", 8);
+        $types = "ii" . str_repeat("s", 17) . "ii" . str_repeat("s", 9);
 
         $stmt->bind_param(
-     $types,
-    $companyId,
-    $user["id"],
-    $title,
-    $headline,
-    $location,
-    $city,
-    $state,
-    $country,
-    $pincode,
-    $address,
-    $category,
-    $jobSection,
-    $industry,
-    $workMode,
-    $jobType,
-    $paymentType,
-    $paymentDuration,
-    $salary,
-    $experienceRequired,
-    $experienceMonths,
-    $openings,
-    $requiredSkills,
-    $qualification,
-    $summary,
-    $description,
-    $rules,
-    $otherDetails,
-    $requirements,
-    $status
-);
+            $types,
+            $companyId,
+            $user["id"],
+            $title,
+            $headline,
+            $location,
+            $city,
+            $state,
+            $country,
+            $pincode,
+            $address,
+            $category,
+            $jobSection,
+            $industry,
+            $workMode,
+            $jobType,
+            $paymentType,
+            $paymentDuration,
+            $salary,
+            $experienceRequired,
+            $experienceMonths,
+            $openings,
+            $requiredSkills,
+            $qualification,
+            $summary,
+            $description,
+            $rules,
+            $otherDetails,
+            $requirements,
+            $status,
+            $screeningQuestions
+        );
 
         if (!$stmt->execute()) {
             echo json_encode([
@@ -363,7 +371,10 @@ if ($method === "POST") {
                 "description" => "s",
                 "rules" => "s",
                 "requirements" => "s",
+                 "other_details" => "s",
+                "screening_questions" => "s",
                 "status" => "s"
+                
             ] as $field => $type) {
 
                 if (isset($body[$field])) {
@@ -493,7 +504,8 @@ if ($method === "POST") {
     exit;
 }
 if ($method === "GET") {
-    $base = "SELECT j.*, c.name AS company_name, c.description AS company_description
+        $base = "SELECT j.*, c.name AS company_name, c.description AS company_description,
+                    (SELECT COUNT(*) FROM applications ap WHERE ap.job_id = j.id) AS applicants
              FROM jobs j JOIN companies c ON c.id = j.company_id";
 
     if (!empty($_GET["mine"])) {

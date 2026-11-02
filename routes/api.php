@@ -5,10 +5,18 @@ use App\Http\Controllers\ResumeController;
 use App\Http\Controllers\InteractionController;
 use App\Http\Controllers\AuthController;
 use App\Services\CandidateScoreService;
+use App\Http\Controllers\AttachmentController;
+use App\Http\Controllers\SavedResumeController;
 
 // ---------- Purane routes ----------
 Route::middleware('legacy:candidate,superadmin')->post('/resume', [ResumeController::class, 'store']);
 Route::middleware('legacy:candidate,employer,superadmin')->get('/resume/{candidateId}', [ResumeController::class, 'show']);
+Route::post('/resume/attachments', [AttachmentController::class, 'store']);
+Route::delete('/resume/attachments/{id}', [AttachmentController::class, 'destroy']);
+
+// ---------- Profile photo ----------
+Route::middleware('legacy:candidate,superadmin')->post('/resume/photo', [ResumeController::class, 'uploadPhoto']);
+Route::middleware('legacy:candidate,superadmin')->delete('/resume/photo', [ResumeController::class, 'deletePhoto']);
 
 // ---------- Login ----------
 Route::post('/login', [AuthController::class, 'login']);
@@ -24,6 +32,8 @@ Route::middleware('auth:sanctum')->prefix('interactions')->group(function () {
     Route::get('/my-activity', [InteractionController::class, 'myActivity']);
     Route::get('/admin-activity', [InteractionController::class, 'adminActivity']);
     Route::get('/candidates', [InteractionController::class, 'candidates']);
+    Route::get('/saved-resumes', [SavedResumeController::class, 'index']);
+    Route::post('/saved-resumes/toggle', [SavedResumeController::class, 'toggle']);
 });
 Route::middleware('superadmin')->get('/admin/candidate-score/{id}', function ($id) {
     return response()->json(['success' => true] + app(CandidateScoreService::class)->score($id));

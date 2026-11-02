@@ -1,23 +1,25 @@
-<?php
+﻿<?php
 
-// CORS: Allow both Vite ports
+// CORS: Allow local development and Netlify production
 $allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
     "http://localhost:5176",
+    "https://dazzling-horse-b7bcb0.netlify.app"
 ];
 
 $origin = $_SERVER["HTTP_ORIGIN"] ?? "";
 
 if (in_array($origin, $allowedOrigins, true)) {
     header("Access-Control-Allow-Origin: " . $origin);
+    header("Vary: Origin");
 }
 
-header("Vary: Origin");
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Access-Control-Allow-Credentials: true");
 
 // Handle browser preflight request
 if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
@@ -157,13 +159,11 @@ try {
 
     http_response_code(500);
 
-    // Log the technical error on the server
     error_log("Registration database error: " . $e->getMessage());
 
     echo json_encode([
         "success" => false,
         "message" => "A database error occurred. Please try again."
-
     ]);
 
 }

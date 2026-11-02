@@ -55,7 +55,7 @@ function member_can($membership, $permission) {
 
 /**
  * Finds the employer's company, creating one (and an owner
- * company_users row) the first time they need it — e.g. on
+ * company_users row) the first time they need it â€” e.g. on
  * their first job post.
  */
 function get_or_create_company($conn, $user) {

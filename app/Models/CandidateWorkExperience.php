@@ -18,6 +18,10 @@ class CandidateWorkExperience extends Model
         'end_date',
         'currently_working',
         'job_description',
+        'reference_name',
+        'reference_designation',
+        'reference_contact',
+        'reference_email',
         'status',
     ];
 }
