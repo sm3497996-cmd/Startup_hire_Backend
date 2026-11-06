@@ -8,7 +8,7 @@ use Illuminate\Validation\Rule;
 use Carbon\Carbon;
 
 /**
- * Employer -> Candidate: like / save / comment / report
+ * Employer -> Candidate: like / save / comment (with replies) / report
  * Candidate ko activity, Superadmin ko sab kuch.
  *
  * ASSUMPTIONS: users table mein `name` aur `role` columns hain
@@ -37,6 +37,14 @@ class InteractionController extends Controller
     private function candidateRule(): array
     {
         return ['required', 'integer', Rule::exists('users', 'id')->where('role', 'candidate')];
+    }
+
+    // Candidate sirf apne profile ka data dekh sakta hai
+    private function guardOwnProfile($user, int $candidateId): void
+    {
+        if ($user->role === 'candidate' && (int) $user->id !== $candidateId) {
+            abort(response()->json(['success' => false, 'message' => 'Not allowed'], 403));
+        }
     }
 
     // ---------- EMPLOYER ----------
@@ -68,16 +76,32 @@ class InteractionController extends Controller
         $data = $request->validate([
             'candidate_id' => $this->candidateRule(),
             'comment_text' => 'required|string|max:1000',
+            'parent_id'    => 'nullable|integer',
         ]);
+
+        // Reply hai to parent dhundo. Reply ka reply bhi top comment ke neeche judta hai.
+        $parent = null;
+        if (!empty($data['parent_id'])) {
+            $p = DB::table('candidate_comments')
+                ->where('id', $data['parent_id'])
+                ->where('candidate_id', $data['candidate_id'])
+                ->first();
+
+            if (!$p) {
+                return response()->json(['success' => false, 'message' => 'Comment not found'], 404);
+            }
+            $parent = $p->parent_id ?: $p->id;
+        }
 
         $id = DB::table('candidate_comments')->insertGetId([
             'candidate_id' => $data['candidate_id'],
             'employer_id'  => $user->id,
+            'parent_id'    => $parent,
             'comment_text' => $data['comment_text'],
             'created_at'   => now(),
         ]);
 
-        return response()->json(['success' => true, 'id' => $id]);
+        return response()->json(['success' => true, 'id' => $id, 'parent_id' => $parent]);
     }
 
     public function report(Request $request)
@@ -231,19 +255,41 @@ class InteractionController extends Controller
         return response()->json(['success' => true, 'candidates' => $list]);
     }
 
-    // ---------- COMMENTS LIST ----------
+    // ---------- COMMENTS LIST (replies ke saath) ----------
 
     public function listComments(Request $request, int $candidateId)
     {
-        $this->requireRole($request, ['employer', 'candidate', 'superadmin']);
+        $user = $this->requireRole($request, ['employer', 'candidate', 'superadmin']);
+        $this->guardOwnProfile($user, $candidateId);
 
         $rows = DB::table('candidate_comments as c')
             ->join('users as u', 'u.id', '=', 'c.employer_id')
             ->where('c.candidate_id', $candidateId)
             ->orderByDesc('c.created_at')
-            ->get(['c.comment_text', 'c.created_at', 'u.name as employer_name']);
+            ->orderByDesc('c.id')
+            ->get(['c.id', 'c.parent_id', 'c.comment_text', 'c.created_at', 'u.name as employer_name']);
 
         return response()->json(['success' => true, 'comments' => $this->withTimeAgo($rows)]);
+    }
+
+    // ---------- LIKES LIST: kisne like kiya ----------
+
+    public function listLikes(Request $request, int $candidateId)
+    {
+        $user = $this->requireRole($request, ['employer', 'candidate', 'superadmin']);
+        $this->guardOwnProfile($user, $candidateId);
+
+        $rows = DB::table('candidate_likes as l')
+            ->join('users as u', 'u.id', '=', 'l.employer_id')
+            ->where('l.candidate_id', $candidateId)
+            ->orderByDesc('l.created_at')
+            ->selectRaw("u.name as employer_name, l.created_at,
+                (SELECT co.name FROM company_users cu
+                 JOIN companies co ON co.id = cu.company_id
+                 WHERE cu.user_id = l.employer_id AND cu.status = 'active' LIMIT 1) as company_name")
+            ->get();
+
+        return response()->json(['success' => true, 'likes' => $this->withTimeAgo($rows)]);
     }
 
     // ---------- CANDIDATE: mujhe kisne like/save/comment kiya ----------
@@ -253,20 +299,29 @@ class InteractionController extends Controller
         $user = $this->requireRole($request, ['candidate']);
         $id = $user->id;
 
+        // employer ki company ka naam (company_users -> companies)
+        $company = fn ($alias) => "(SELECT co.name FROM company_users cu
+            JOIN companies co ON co.id = cu.company_id
+            WHERE cu.user_id = {$alias}.employer_id AND cu.status = 'active' LIMIT 1)";
+
+        $cl = $company('l');
+        $cs = $company('s');
+        $cc = $company('c');
+
         $likes = DB::table('candidate_likes as l')
             ->join('users as u', 'u.id', '=', 'l.employer_id')
             ->where('l.candidate_id', $id)
-            ->selectRaw("'like' as type, u.name as employer_name, l.created_at, NULL as comment_text");
+            ->selectRaw("'like' as type, u.name as employer_name, $cl as company_name, l.created_at, NULL as comment_text");
 
         $saves = DB::table('candidate_saves as s')
             ->join('users as u', 'u.id', '=', 's.employer_id')
             ->where('s.candidate_id', $id)
-            ->selectRaw("'save' as type, u.name as employer_name, s.created_at, NULL as comment_text");
+            ->selectRaw("'save' as type, u.name as employer_name, $cs as company_name, s.created_at, NULL as comment_text");
 
         $comments = DB::table('candidate_comments as c')
             ->join('users as u', 'u.id', '=', 'c.employer_id')
             ->where('c.candidate_id', $id)
-            ->selectRaw("'comment' as type, u.name as employer_name, c.created_at, c.comment_text");
+            ->selectRaw("'comment' as type, u.name as employer_name, $cc as company_name, c.created_at, c.comment_text");
 
         $rows = $likes->unionAll($saves)->unionAll($comments)
             ->orderByDesc('created_at')->limit(100)->get();

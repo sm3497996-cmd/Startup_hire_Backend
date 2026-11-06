@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Applications API
  * ---------------------------------------------------------
@@ -37,6 +37,7 @@ function application_row($row) {
         "candidate_id" => (int)$row["candidate_id"],
         "candidate_name" => $row["candidate_name"] ?? null,
         "candidate_email" => $row["candidate_email"] ?? null,
+        "resume_version_id" => isset($row["resume_version_id"]) ? (int)$row["resume_version_id"] : null,
 
         "status" => $row["status"] ?? "Applied",
 
@@ -109,7 +110,65 @@ if ($method === "GET") {
     }
 
     // ---------- Employer views ----------
-    $user = require_role(["employer", "superadmin"]);
+        $user = require_role(["employer", "superadmin"]);
+
+    // ---------- Employer: resume version an applicant applied with ----------
+    if (!empty($_GET["resume_version_for"])) {
+        $appId = (int)$_GET["resume_version_for"];
+
+        $stmt = $conn->prepare(
+            "SELECT a.resume_version_id, a.candidate_id, j.company_id
+             FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = ?"
+        );
+        $stmt->bind_param("i", $appId);
+        $stmt->execute();
+        $app = $stmt->get_result()->fetch_assoc();
+
+        if (!$app) {
+            echo json_encode(["success" => false, "message" => "Application not found"]);
+            exit;
+        }
+
+        if ($user["role"] !== "superadmin") {
+            $membership = get_membership($conn, $user["id"]);
+            if (!$membership
+                || (int)$membership["company_id"] !== (int)$app["company_id"]
+                || !member_can($membership, "view_applications")) {
+                http_response_code(403);
+                echo json_encode(["success" => false, "message" => "Not allowed"]);
+                exit;
+            }
+        }
+
+        if (empty($app["resume_version_id"])) {
+            echo json_encode(["success" => true, "version" => null]);
+            exit;
+        }
+
+        $vid = (int)$app["resume_version_id"];
+        $cid = (int)$app["candidate_id"];
+        $stmt = $conn->prepare(
+            "SELECT title, target_field, data FROM resume_versions WHERE id = ? AND candidate_id = ?"
+        );
+        $stmt->bind_param("ii", $vid, $cid);
+        $stmt->execute();
+        $v = $stmt->get_result()->fetch_assoc();
+
+        if (!$v) {
+            echo json_encode(["success" => true, "version" => null]);
+            exit;
+        }
+
+        echo json_encode([
+            "success" => true,
+            "version" => [
+                "title" => $v["title"],
+                "target_field" => $v["target_field"],
+                "data" => json_decode($v["data"], true) ?: new stdClass(),
+            ],
+        ]);
+        exit;
+    }
 
     if ($user["role"] === "superadmin") {
         $res = $conn->query(
@@ -218,13 +277,24 @@ if ($method === "POST") {
                 $answersJson = json_encode($clean, JSON_UNESCAPED_UNICODE);
             }
         }
+                // Optional: resume version the candidate chose (must be their own)
+        $versionId = null;
+        $rawVersion = (int)($body["resume_version_id"] ?? 0);
+        if ($rawVersion > 0) {
+            $chk = $conn->prepare("SELECT id FROM resume_versions WHERE id = ? AND candidate_id = ?");
+            $chk->bind_param("ii", $rawVersion, $user["id"]);
+            $chk->execute();
+            if ($chk->get_result()->num_rows > 0) {
+                $versionId = $rawVersion;
+            }
+        }
 
         // FIX: PHP 8.1+ me duplicate insert exception throw karta hai, isliye try/catch
         try {
-            $stmt = $conn->prepare(
-                "INSERT INTO applications (job_id, candidate_id, screening_answers) VALUES (?, ?, ?)"
+                       $stmt = $conn->prepare(
+                "INSERT INTO applications (job_id, candidate_id, screening_answers, resume_version_id) VALUES (?, ?, ?, ?)"
             );
-            $stmt->bind_param("iis", $jobId, $user["id"], $answersJson);
+            $stmt->bind_param("iisi", $jobId, $user["id"], $answersJson, $versionId);
             $stmt->execute();
 
             echo json_encode(["success" => true, "message" => "Application submitted"]);

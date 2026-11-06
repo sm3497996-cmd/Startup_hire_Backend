@@ -18,7 +18,8 @@ require_once __DIR__ . "/../app/Support/helpers.php";
 
 json_cors();
 
-$me = require_role("candidate");
+$me = require_role(["candidate", "employer", "superadmin"]);
+$myRole = $me["role"];
 $uid = (int)$me["id"];
 $method = $_SERVER["REQUEST_METHOD"];
 
@@ -42,7 +43,10 @@ $conn->query(
         KEY idx_job (job_id)
     )"
 );
-
+$col = $conn->query("SHOW COLUMNS FROM job_comments LIKE 'parent_id'");
+if ($col && $col->num_rows === 0) {
+    $conn->query("ALTER TABLE job_comments ADD COLUMN parent_id INT NULL DEFAULT NULL AFTER job_id");
+} 
 /* ---------------- helpers ---------------- */
 
 function js_out($data)
@@ -116,37 +120,66 @@ if ($method === "GET" && $action === "summary") {
     ]);
 }
 
+
+/* ---------------- GET: who liked ---------------- */
+
+if ($method === "GET" && $action === "likes") {
+    $jobId = (int)($_GET["job_id"] ?? 0);
+
+    $st = $conn->prepare(
+        "SELECT u.name AS user_name, u.role AS user_role,
+                TIMESTAMPDIFF(SECOND, l.created_at, NOW()) AS secs
+         FROM job_likes l
+         JOIN users u ON u.id = l.user_id
+         WHERE l.job_id = ?
+         ORDER BY l.id DESC
+         LIMIT 200"
+    );
+    $st->bind_param("i", $jobId);
+    $st->execute();
+
+    $list = [];
+    foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+        $list[] = [
+            "user_name" => $r["user_name"],
+            "user_role" => $r["user_role"],
+            "time_ago"  => js_ago($r["secs"]),
+        ];
+    }
+    js_out(["success" => true, "likes" => $list]);
+}
+
 /* ---------------- GET: comments of one job ---------------- */
 
 if ($method === "GET" && $action === "comments") {
     $jobId = (int)($_GET["job_id"] ?? 0);
 
     $st = $conn->prepare(
-        "SELECT c.id, c.body, u.name AS user_name,
+        "SELECT c.id, c.parent_id, c.user_id, c.body, u.name AS user_name, u.role AS user_role,
                 TIMESTAMPDIFF(SECOND, c.created_at, NOW()) AS secs
          FROM job_comments c
          JOIN users u ON u.id = c.user_id
          WHERE c.job_id = ?
          ORDER BY c.id ASC
-         LIMIT 100"
+         LIMIT 300"
     );
     $st->bind_param("i", $jobId);
     $st->execute();
-    $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 
     $list = [];
-    foreach ($rows as $r) {
+    foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
         $list[] = [
             "id"        => (int)$r["id"],
+            "parent_id" => $r["parent_id"] ? (int)$r["parent_id"] : null,
             "user_name" => $r["user_name"],
+            "user_role" => $r["user_role"],
+            "mine"      => (int)$r["user_id"] === $uid,
             "body"      => $r["body"],
             "time_ago"  => js_ago($r["secs"]),
         ];
     }
-
     js_out(["success" => true, "comments" => $list]);
 }
-
 /* ---------------- POST ---------------- */
 
 if ($method === "POST") {
@@ -160,6 +193,9 @@ if ($method === "POST") {
 
     if ($jobId <= 0 || !js_job_exists($conn, $jobId)) {
         js_out(["success" => false, "message" => "Job not found"]);
+    }
+        if ($act === "toggle_like" && $myRole !== "candidate") {
+        js_out(["success" => false, "message" => "Only candidates can like jobs"]);
     }
 
     if ($act === "toggle_like") {
@@ -185,9 +221,12 @@ if ($method === "POST") {
         ]);
     }
 
-    if ($act === "comment") {
-        $text = trim((string)($body["body"] ?? ""));
+        if ($act === "comment") {
+        if (!in_array($myRole, ["candidate", "employer"], true)) {
+            js_out(["success" => false, "message" => "Not allowed"]);
+        }
 
+        $text = trim((string)($body["body"] ?? ""));
         if ($text === "") {
             js_out(["success" => false, "message" => "Comment is empty"]);
         }
@@ -195,20 +234,32 @@ if ($method === "POST") {
             js_out(["success" => false, "message" => "Comment is too long"]);
         }
 
-        $ins = $conn->prepare("INSERT INTO job_comments (job_id, user_id, body) VALUES (?, ?, ?)");
-        $ins->bind_param("iis", $jobId, $uid, $text);
-        $ins->execute();
+        // Reply hai to parent dhundo. Reply ka reply bhi top comment ke neeche hi judta hai.
+        $parent = null;
+        $parentId = (int)($body["parent_id"] ?? 0);
+        if ($parentId > 0) {
+            $st = $conn->prepare("SELECT id, parent_id FROM job_comments WHERE id = ? AND job_id = ?");
+            $st->bind_param("ii", $parentId, $jobId);
+            $st->execute();
+            $p = $st->get_result()->fetch_assoc();
+            if (!$p) {
+                js_out(["success" => false, "message" => "Comment not found"]);
+            }
+            $parent = !empty($p["parent_id"]) ? (int)$p["parent_id"] : (int)$p["id"];
+        }
 
-        $st = $conn->prepare("SELECT name FROM users WHERE id = ?");
-        $st->bind_param("i", $uid);
-        $st->execute();
-        $u = $st->get_result()->fetch_assoc();
+        $ins = $conn->prepare("INSERT INTO job_comments (job_id, user_id, parent_id, body) VALUES (?, ?, ?, ?)");
+        $ins->bind_param("iiis", $jobId, $uid, $parent, $text);
+        $ins->execute();
 
         js_out([
             "success" => true,
             "comment" => [
                 "id"        => (int)$conn->insert_id,
-                "user_name" => $u["name"] ?? "You",
+                "parent_id" => $parent,
+                "user_name" => $me["name"] ?? "You",
+                "user_role" => $myRole,
+                "mine"      => true,
                 "body"      => $text,
                 "time_ago"  => "just now",
             ],

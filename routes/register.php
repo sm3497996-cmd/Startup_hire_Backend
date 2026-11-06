@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 // CORS: Allow local development and Netlify production
 $allowedOrigins = [
