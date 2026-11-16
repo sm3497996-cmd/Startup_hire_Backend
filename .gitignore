@@ -47,3 +47,6 @@ config/db.php
 app/Support/db.php
 
 test-db.php
+
+*.zip
+/public/build
