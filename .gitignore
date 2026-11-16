@@ -41,3 +41,7 @@ yarn-error.log
 /boost.json
 /opencode.json
 /opencode.jsonc
+
+config/db.php
+
+app/Support/db.php
